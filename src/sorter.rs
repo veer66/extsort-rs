@@ -16,8 +16,10 @@ use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Error, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::marker::Send;
 
 use tempdir;
+use rayon::prelude::*;
 
 pub struct ExternalSorter {
     max_size: usize,
@@ -46,6 +48,7 @@ impl ExternalSorter {
     pub fn sort<T, I>(&self, iterator: I) -> Result<SortedIterator<T>, Error>
     where
         T: Sortable<T>,
+        T: Send,
         I: Iterator<Item = T>,
     {
         let mut tempdir: Option<tempdir::TempDir> = None;
@@ -70,7 +73,7 @@ impl ExternalSorter {
             Self::sort_and_write_segment(sort_dir, &mut segments_file, &mut buffer)?;
             None
         } else {
-            buffer.sort_unstable();
+            buffer.par_sort_unstable();
             Some(VecDeque::from(buffer))
         };
 
@@ -105,8 +108,9 @@ impl ExternalSorter {
     ) -> Result<(), Error>
     where
         T: Sortable<T>,
+        T: Send,
     {
-        buffer.sort_unstable();
+        buffer.par_sort_unstable();
 
         let segment_path = sort_dir.join(format!("{}", segments.len()));
         let segment_file = OpenOptions::new()
